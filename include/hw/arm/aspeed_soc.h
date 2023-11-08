@@ -115,6 +115,16 @@ struct Aspeed2600SoCState {
 #define TYPE_ASPEED2600_SOC "aspeed2600-soc"
 OBJECT_DECLARE_SIMPLE_TYPE(Aspeed2600SoCState, ASPEED2600_SOC)
 
+struct Aspeed2700SoCState {
+    AspeedSoCState parent;
+
+    A15MPPrivState a35mpcore;
+    ARMCPU cpu[ASPEED_CPUS_NUM]; /* XXX belong to a7mpcore */
+};
+
+#define TYPE_ASPEED2700_SOC "aspeed2700-soc"
+OBJECT_DECLARE_SIMPLE_TYPE(Aspeed2700SoCState, ASPEED2700_SOC)
+
 struct Aspeed10x0SoCState {
     AspeedSoCState parent;
 

@@ -1034,6 +1034,8 @@ static void arm_setup_direct_kernel_boot(ARMCPU *cpu,
         info->initrd_start = MAX(info->initrd_start, image_high_addr);
     }
     info->initrd_start = TARGET_PAGE_ALIGN(info->initrd_start);
+    printf("%s: initrd_start: %08lx is_linux=%d\n", __func__,
+           info->initrd_start, is_linux);
 
     if (is_linux) {
         uint32_t fixupcontext[FIXUP_MAX];
