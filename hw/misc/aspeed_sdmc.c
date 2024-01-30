@@ -141,6 +141,7 @@ static void aspeed_sdmc_write(void *opaque, hwaddr addr, uint64_t data,
 
     addr >>= 2;
 
+    trace_aspeed_sdmc_write(addr, data);
     if (addr >= ARRAY_SIZE(s->regs)) {
         qemu_log_mask(LOG_GUEST_ERROR,
                       "%s: Out-of-bounds write at offset 0x%" HWADDR_PRIx "\n",
@@ -148,7 +149,6 @@ static void aspeed_sdmc_write(void *opaque, hwaddr addr, uint64_t data,
         return;
     }
 
-    trace_aspeed_sdmc_write(addr, data);
     asc->write(s, addr, data);
 }
 
@@ -231,7 +231,8 @@ static void aspeed_sdmc_realize(DeviceState *dev, Error **errp)
     AspeedSDMCState *s = ASPEED_SDMC(dev);
     AspeedSDMCClass *asc = ASPEED_SDMC_GET_CLASS(s);
 
-    assert(asc->max_ram_size < 4 * GiB); /* 32-bit address bus */
+    if(!asc->is_aarch64)
+        assert(asc->max_ram_size < 4 * GiB); /* 32-bit address bus */
     s->max_ram_size = asc->max_ram_size;
 
     memory_region_init_io(&s->iomem, OBJECT(s), &aspeed_sdmc_ops, s,
@@ -512,12 +513,109 @@ static const TypeInfo aspeed_2600_sdmc_info = {
     .class_init = aspeed_2600_sdmc_class_init,
 };
 
+static uint32_t aspeed_2750_sdmc_compute_conf(AspeedSDMCState *s, uint32_t data)
+{
+    uint32_t fixed_conf = ASPEED_SDMC_HW_VERSION(3) |
+                          ASPEED_SDMC_VGA_APERTURE(ASPEED_SDMC_VGA_64MB) |
+                          ASPEED_SDMC_DRAM_SIZE(aspeed_sdmc_get_ram_bits(s));
+
+    /* Make sure readonly bits are kept (use ast2500 mask) */
+    data &= ~ASPEED_SDMC_AST2500_READONLY_MASK;
+
+    return data | fixed_conf;
+}
+
+static void aspeed_2750_sdmc_write(AspeedSDMCState *s, uint32_t reg,
+                                   uint32_t data)
+{
+#if 0
+    /* Unprotected registers */
+    switch (reg) {
+        case R_ISR:
+        case R_MCR6C:
+        case R_TEST_START_LEN:
+        case R_TEST_FAIL_DQ:
+        case R_TEST_INIT_VAL:
+        case R_DRAM_SW:
+        case R_DRAM_TIME:
+        case R_ECC_ERR_INJECT:
+            s->regs[reg] = data;
+            return;
+    }
+
+    if (s->regs[R_PROT] == PROT_HARDLOCKED) {
+        qemu_log_mask(LOG_GUEST_ERROR, "%s: SDMC is locked until system reset!\n",
+                      __func__);
+        return;
+    }
+
+    if (reg != R_PROT && s->regs[R_PROT] == PROT_SOFTLOCKED) {
+        qemu_log_mask(LOG_GUEST_ERROR,
+                      "%s: SDMC is locked! (write to MCR%02x blocked)\n",
+                      __func__, reg * 4);
+        return;
+    }
+
+    switch (reg) {
+        case R_PROT:
+            if (data == PROT_KEY_UNLOCK)  {
+                data = PROT_UNLOCKED;
+            } else if (data == PROT_KEY_HARDLOCK) {
+                data = PROT_HARDLOCKED;
+            } else {
+                data = PROT_SOFTLOCKED;
+            }
+            break;
+        case R_CONF:
+            data = aspeed_2750_sdmc_compute_conf(s, data);
+            break;
+        case R_STATUS1:
+            /* Will never return 'busy'. 'lock status' is always set */
+            data &= ~PHY_BUSY_STATE;
+            data |= PHY_PLL_LOCK_STATUS;
+            break;
+        case R_ECC_TEST_CTRL:
+            /* Always done, always happy */
+            data |= ECC_TEST_FINISHED;
+            data &= ~ECC_TEST_FAIL;
+            break;
+        default:
+            break;
+    }
+#endif
+    s->regs[reg] = data;
+}
+
+static const uint64_t
+        aspeed_2750_ram_sizes[] = { 256 * MiB, 512 * MiB, 1024 * MiB, 2048 * MiB, 8192 * MiB, 0};
+
+static void aspeed_2750_sdmc_class_init(ObjectClass *klass, void *data)
+{
+    DeviceClass *dc = DEVICE_CLASS(klass);
+    AspeedSDMCClass *asc = ASPEED_SDMC_CLASS(klass);
+
+    dc->desc = "ASPEED 2750 SDRAM Memory Controller";
+
+    asc->is_aarch64 = true;
+    asc->max_ram_size = 32 * GiB;
+    asc->compute_conf = aspeed_2750_sdmc_compute_conf;
+    asc->write = aspeed_2750_sdmc_write;
+    asc->valid_ram_sizes = aspeed_2750_ram_sizes;
+}
+
+static const TypeInfo aspeed_2750_sdmc_info = {
+        .name = TYPE_ASPEED_2750_SDMC,
+        .parent = TYPE_ASPEED_SDMC,
+        .class_init = aspeed_2750_sdmc_class_init,
+};
+
 static void aspeed_sdmc_register_types(void)
 {
     type_register_static(&aspeed_sdmc_info);
     type_register_static(&aspeed_2400_sdmc_info);
     type_register_static(&aspeed_2500_sdmc_info);
     type_register_static(&aspeed_2600_sdmc_info);
+    type_register_static(&aspeed_2750_sdmc_info);
 }
 
 type_init(aspeed_sdmc_register_types);

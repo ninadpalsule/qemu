@@ -26,6 +26,7 @@
 #include "hw/ssi/aspeed_smc.h"
 #include "hw/misc/aspeed_hace.h"
 #include "hw/misc/aspeed_sbc.h"
+#include "hw/misc/aspeed_sli.h"
 #include "hw/watchdog/wdt_aspeed.h"
 #include "hw/net/ftgmac100.h"
 #include "target/arm/cpu.h"
@@ -40,8 +41,8 @@
 
 #define ASPEED_SPIS_NUM  2
 #define ASPEED_EHCIS_NUM 2
-#define ASPEED_WDTS_NUM  4
-#define ASPEED_CPUS_NUM  2
+#define ASPEED_WDTS_NUM  8
+#define ASPEED_CPUS_NUM  4
 #define ASPEED_MACS_NUM  4
 #define ASPEED_UARTS_NUM 13
 #define ASPEED_JTAG_NUM  2
@@ -61,11 +62,13 @@ struct AspeedSoCState {
     MemoryRegion spi_boot_container;
     MemoryRegion spi_boot;
     AspeedVICState vic;
+    AspeedINTCState intc;
     AspeedRtcState rtc;
     AspeedTimerCtrlState timerctrl;
     AspeedI2CState i2c;
     AspeedI3CState i3c;
     AspeedSCUState scu;
+    AspeedSCUState scu1;
     AspeedHACEState hace;
     AspeedXDMAState xdma;
     AspeedADCState adc;
@@ -73,6 +76,7 @@ struct AspeedSoCState {
     AspeedSMCState spi[ASPEED_SPIS_NUM];
     EHCISysBusState ehci[ASPEED_EHCIS_NUM];
     AspeedSBCState sbc;
+    AspeedSLIState sli;
     MemoryRegion secsram;
     UnimplementedDeviceState sbc_unimplemented;
     AspeedSDMCState sdmc;
@@ -85,6 +89,7 @@ struct AspeedSoCState {
     AspeedSDHCIState emmc;
     AspeedLPCState lpc;
     AspeedPECIState peci;
+    DeviceState *gic;
     SerialMM uart[ASPEED_UARTS_NUM];
     Clock *sysclk;
     UnimplementedDeviceState iomem;
@@ -106,7 +111,7 @@ struct AspeedSoCClass {
 
     const char *name;
     const char *cpu_type;
-    uint32_t silicon_rev;
+    uint64_t silicon_rev;
     uint64_t sram_size;
     uint64_t secsram_size;
     int spis_num;
@@ -124,6 +129,7 @@ struct AspeedSoCClass {
 enum {
     ASPEED_DEV_SPI_BOOT,
     ASPEED_DEV_IOMEM,
+    ASPEED_DEV_UART0,
     ASPEED_DEV_UART1,
     ASPEED_DEV_UART2,
     ASPEED_DEV_UART3,
@@ -138,7 +144,12 @@ enum {
     ASPEED_DEV_UART12,
     ASPEED_DEV_UART13,
     ASPEED_DEV_VUART,
+    ASPEED_DEV_VUART1,
+    ASPEED_DEV_VUART2,
+    ASPEED_DEV_VUART3,
+    ASPEED_DEV_VUART4,
     ASPEED_DEV_FMC,
+    ASPEED_DEV_SPI0,
     ASPEED_DEV_SPI1,
     ASPEED_DEV_SPI2,
     ASPEED_DEV_EHCI1,
@@ -191,6 +202,7 @@ enum {
     ASPEED_DEV_SGPIOM,
     ASPEED_DEV_JTAG0,
     ASPEED_DEV_JTAG1,
+    ASPEED_DEV_SCU1,
 };
 
 #define ASPEED_SOC_SPI_BOOT_ADDR 0x0

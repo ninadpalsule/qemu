@@ -17,6 +17,7 @@ OBJECT_DECLARE_TYPE(AspeedSDMCState, AspeedSDMCClass, ASPEED_SDMC)
 #define TYPE_ASPEED_2400_SDMC TYPE_ASPEED_SDMC "-ast2400"
 #define TYPE_ASPEED_2500_SDMC TYPE_ASPEED_SDMC "-ast2500"
 #define TYPE_ASPEED_2600_SDMC TYPE_ASPEED_SDMC "-ast2600"
+#define TYPE_ASPEED_2750_SDMC TYPE_ASPEED_SDMC "-ast2750"
 
 /*
  * SDMC has 174 documented registers. In addition the u-boot device tree
@@ -51,6 +52,7 @@ struct AspeedSDMCClass {
     const uint64_t *valid_ram_sizes;
     uint32_t (*compute_conf)(AspeedSDMCState *s, uint32_t data);
     void (*write)(AspeedSDMCState *s, uint32_t reg, uint32_t data);
+    uint32_t is_aarch64;
 };
 
 #endif /* ASPEED_SDMC_H */

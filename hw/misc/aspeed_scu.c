@@ -134,6 +134,14 @@
 
 #define AST2600_CLK TO_REG(0x40)
 
+#define AST2700_SILICON_REV       TO_REG(0x00)
+#define AST2700_HW_STRAP1         TO_REG(0x10)
+#define AST2700_HW_STRAP1_CLR     TO_REG(0x14)
+#define AST2700_HW_STRAP1_LOCK    TO_REG(0x20)
+#define AST2700_HW_STRAP1_SEC1    TO_REG(0x24)
+#define AST2700_HW_STRAP1_SEC2    TO_REG(0x28)
+#define AST2700_HW_STRAP1_SEC3    TO_REG(0x2C)
+
 #define SCU_IO_REGION_SIZE 0x1000
 
 static const uint32_t ast2400_a0_resets[ASPEED_SCU_NR_REGS] = {
@@ -242,6 +250,15 @@ static uint32_t aspeed_1030_scu_get_apb_freq(AspeedSCUState *s)
 
     return hpll / (SCU_AST1030_CLK_GET_PCLK_DIV(s->regs[AST2600_CLK_SEL4]) + 1)
         / asc->apb_divider;
+}
+
+static uint32_t aspeed_2750_scu_get_apb_freq(AspeedSCUState *s)
+{
+    AspeedSCUClass *asc = ASPEED_SCU_GET_CLASS(s);
+    uint32_t hpll = asc->calc_hpll(s, s->regs[AST2600_HPLL_PARAM]);
+
+    return hpll / (SCU_CLK_GET_PCLK_DIV(s->regs[AST2600_CLK_SEL]) + 1)
+           / asc->apb_divider;
 }
 
 static uint64_t aspeed_scu_read(void *opaque, hwaddr offset, unsigned size)
@@ -471,6 +488,11 @@ static uint32_t aspeed_2600_scu_calc_hpll(AspeedSCUState *s, uint32_t hpll_reg)
     return clkin * multiplier;
 }
 
+static uint32_t aspeed_2750_scu_calc_hpll(AspeedSCUState *s, uint32_t hpll_reg)
+{
+    return 0;
+}
+
 static void aspeed_scu_reset(DeviceState *dev)
 {
     AspeedSCUState *s = ASPEED_SCU(dev);
@@ -494,6 +516,9 @@ static uint32_t aspeed_silicon_revs[] = {
     AST2600_A3_SILICON_REV,
     AST1030_A0_SILICON_REV,
     AST1030_A1_SILICON_REV,
+    AST2700_A0_SILICON_REV,
+    AST2720_A0_SILICON_REV,
+    AST2750_A0_SILICON_REV,
 };
 
 bool is_supported_silicon_rev(uint32_t silicon_rev)
@@ -538,11 +563,11 @@ static const VMStateDescription vmstate_aspeed_scu = {
 };
 
 static Property aspeed_scu_properties[] = {
-    DEFINE_PROP_UINT32("silicon-rev", AspeedSCUState, silicon_rev, 0),
-    DEFINE_PROP_UINT32("hw-strap1", AspeedSCUState, hw_strap1, 0),
-    DEFINE_PROP_UINT32("hw-strap2", AspeedSCUState, hw_strap2, 0),
-    DEFINE_PROP_UINT32("hw-prot-key", AspeedSCUState, hw_prot_key, 0),
-    DEFINE_PROP_END_OF_LIST(),
+        DEFINE_PROP_UINT32("silicon-rev", AspeedSCUState, silicon_rev, 0),
+        DEFINE_PROP_UINT32("hw-strap1", AspeedSCUState, hw_strap1, 0),
+        DEFINE_PROP_UINT32("hw-strap2", AspeedSCUState, hw_strap2, 0),
+        DEFINE_PROP_UINT32("hw-prot-key", AspeedSCUState, hw_prot_key, 0),
+        DEFINE_PROP_END_OF_LIST(),
 };
 
 static void aspeed_scu_class_init(ObjectClass *klass, void *data)
@@ -783,6 +808,252 @@ static const TypeInfo aspeed_2600_scu_info = {
     .class_init = aspeed_2600_scu_class_init,
 };
 
+static uint64_t aspeed_ast2750_scu_read(void *opaque, hwaddr offset,
+                                        unsigned size)
+{
+    AspeedSCUState *s = ASPEED_SCU(opaque);
+    int reg = TO_REG(offset);
+
+    if (reg >= ASPEED_AST2750_SCU_NR_REGS) {
+        qemu_log_mask(LOG_GUEST_ERROR,
+                      "%s: Out-of-bounds read at offset 0x%" HWADDR_PRIx "\n",
+                __func__, offset);
+        return 0;
+    }
+
+//printf("SCU Read offset=0x%lx size=%d value=0x%08x\n", offset, size, s->regs[reg]);
+    switch (reg) {
+    default:
+        qemu_log_mask(LOG_GUEST_ERROR,
+                      "%s: Unhandled read at offset 0x%" HWADDR_PRIx "\n",
+                      __func__, offset);
+    }
+
+    trace_aspeed_ast2750_scu_read(offset, size, s->regs[reg]);
+    return s->regs[reg];
+}
+
+static void aspeed_ast2750_scu_write(void *opaque, hwaddr offset,
+                                     uint64_t data64, unsigned size)
+{
+    AspeedSCUState *s = ASPEED_SCU(opaque);
+    int reg = TO_REG(offset);
+    /* Truncate here so bitwise operations below behave as expected */
+    uint32_t data = data64;
+
+    if (reg >= ASPEED_AST2750_SCU_NR_REGS) {
+        qemu_log_mask(LOG_GUEST_ERROR,
+                      "%s: Out-of-bounds write at offset 0x%" HWADDR_PRIx "\n",
+                __func__, offset);
+        return;
+    }
+
+    trace_aspeed_ast2750_scu_write(offset, size, data);
+//printf("SCU Write offset=0x%lx size=%d orig_value=0x%08x new_value=0x%lx\n", offset, size, s->regs[reg], data64);
+
+    switch (reg) {
+    default:
+        qemu_log_mask(LOG_GUEST_ERROR,
+                      "%s: Unhandeled write at offset 0x%" HWADDR_PRIx "\n",
+                      __func__, offset);
+        break;
+    }
+
+    s->regs[reg] = data;
+}
+
+static const MemoryRegionOps aspeed_ast2750_scu_ops = {
+        .read = aspeed_ast2750_scu_read,
+        .write = aspeed_ast2750_scu_write,
+        .endianness = DEVICE_LITTLE_ENDIAN,
+        .valid.min_access_size = 1,
+        .valid.max_access_size = 8,
+        .valid.unaligned = false,
+};
+
+/* CPU SCU#0 0x12c02000 */
+static const uint32_t ast2750_a0_resets[ASPEED_AST2750_SCU_NR_REGS] = {
+        [AST2700_SILICON_REV]       = 0x06000003,
+        [AST2700_HW_STRAP1]         = 0x00000800,
+        [AST2700_HW_STRAP1_CLR]     = 0xFFF0FFF0,
+        [AST2700_HW_STRAP1_LOCK]    = 0x00000FFF,
+        [AST2700_HW_STRAP1_SEC1]    = 0x000000FF,
+        [AST2700_HW_STRAP1_SEC2]    = 0x00000000,
+        [AST2700_HW_STRAP1_SEC3]    = 0x1000408F,
+	[TO_REG(0x300)] = 0x0000009f,
+	[TO_REG(0x304)] = 0x8000004f,
+	[TO_REG(0x308)] = 0x0080009f,
+	[TO_REG(0x30c)] = 0x8000004f,
+	[TO_REG(0x310)] = 0x00000040,
+	[TO_REG(0x314)] = 0x80000000,
+	[TO_REG(0x320)] = 0x00050002,
+	[TO_REG(0x330)] = 0x00050002,
+	[TO_REG(0x340)] = 0x00050002,
+	[TO_REG(0x350)] = 0x00050002,
+	[TO_REG(0x360)] = 0x0000004c,
+	[TO_REG(0x3b0)] = 0x000375eb,
+
+	[0x780 >> 2] = 0x00000000,
+	[0x784 >> 2] = 0x00000004,
+};
+
+static void aspeed_ast2750_scu_reset(DeviceState *dev)
+{
+    AspeedSCUState *s = ASPEED_SCU(dev);
+    AspeedSCUClass *asc = ASPEED_SCU_GET_CLASS(dev);
+
+    memcpy(s->regs, asc->resets, asc->nr_regs * 4);
+}
+
+static void aspeed_2750_scu_class_init(ObjectClass *klass, void *data)
+{
+    DeviceClass *dc = DEVICE_CLASS(klass);
+    AspeedSCUClass *asc = ASPEED_SCU_CLASS(klass);
+
+    dc->desc = "ASPEED 2750 System Control Unit";
+    dc->reset = aspeed_ast2750_scu_reset;
+    asc->resets = ast2750_a0_resets;
+    asc->calc_hpll = aspeed_2750_scu_calc_hpll;
+    asc->get_apb = aspeed_2750_scu_get_apb_freq;
+    asc->apb_divider = 4;
+    asc->nr_regs = ASPEED_AST2750_SCU_NR_REGS;
+    asc->clkin_25Mhz = true;
+    asc->ops = &aspeed_ast2750_scu_ops;
+}
+
+static uint64_t aspeed_ast2750_scu1_read(void *opaque, hwaddr offset,
+                                        unsigned size)
+{
+    AspeedSCUState *s = ASPEED_SCU(opaque);
+    int reg = TO_REG(offset);
+    if (reg >= ASPEED_AST2750_SCU_NR_REGS) {
+        qemu_log_mask(LOG_GUEST_ERROR,
+                      "%s: Out-of-bounds read at offset 0x%" HWADDR_PRIx "\n",
+                __func__, offset);
+        return 0;
+    }
+
+//printf("SCUIO Read offset=0x%lx size=%d value=0x%08x\n", offset, size, s->regs[reg]);
+    switch (reg) {
+    default:
+        qemu_log_mask(LOG_GUEST_ERROR,
+                      "%s: Unhandled read at offset 0x%" HWADDR_PRIx "\n",
+                      __func__, offset);
+    }
+
+    trace_aspeed_ast2750_scu_read(offset, size, s->regs[reg]);
+    return s->regs[reg];
+}
+
+static void aspeed_ast2750_scu1_write(void *opaque, hwaddr offset,
+                                     uint64_t data64, unsigned size)
+{
+    AspeedSCUState *s = ASPEED_SCU(opaque);
+    int reg = TO_REG(offset);
+    /* Truncate here so bitwise operations below behave as expected */
+    uint32_t data = data64;
+
+    if (reg >= ASPEED_AST2750_SCU_NR_REGS) {
+        qemu_log_mask(LOG_GUEST_ERROR,
+                      "%s: Out-of-bounds write at offset 0x%" HWADDR_PRIx "\n",
+                __func__, offset);
+        return;
+    }
+
+    trace_aspeed_ast2750_scu_write(offset, size, data);
+//printf("TTTT SCUIO Write offset=0x%lx size=%d orig_value=0x%08x new_value=0x%lx\n", offset, size, s->regs[reg], data64);
+
+    bool updated = false;
+    switch (reg) {
+    case TO_REG(0x240):
+    case TO_REG(0x260):
+        s->regs[reg] |= data;
+        updated = true;
+        break;
+    case TO_REG(0x244):
+    case TO_REG(0x264):
+        s->regs[reg - 1] ^= data;
+        updated = true;
+        break;
+    default:
+        qemu_log_mask(LOG_GUEST_ERROR,
+                      "%s: Unhandeled write at offset 0x%" HWADDR_PRIx "\n",
+                      __func__, offset);
+        break;
+    }
+
+    if (!updated)
+        s->regs[reg] = data;
+
+}
+
+static const MemoryRegionOps aspeed_ast2750_scu1_ops = {
+        .read = aspeed_ast2750_scu1_read,
+        .write = aspeed_ast2750_scu1_write,
+        .endianness = DEVICE_LITTLE_ENDIAN,
+        .valid.min_access_size = 1,
+        .valid.max_access_size = 8,
+        .valid.unaligned = false,
+};
+
+static const uint32_t ast2750_a0_resets_1[ASPEED_AST2750_SCU_NR_REGS] = {
+        [AST2700_SILICON_REV]       = 0x06000003,
+        [AST2700_HW_STRAP1]         = 0x00000504,
+        [AST2700_HW_STRAP1_CLR]     = 0xFFF0FFF0,
+        [AST2700_HW_STRAP1_LOCK]    = 0x00000FFF,
+        [AST2700_HW_STRAP1_SEC1]    = 0x000000FF,
+        [AST2700_HW_STRAP1_SEC2]    = 0x00000000,
+        [AST2700_HW_STRAP1_SEC3]    = 0x1000408F,
+        [0x240 >> 2] = 0xffff8400,
+        [0x260 >> 2] = 0x00005f30,
+        [0x280 >> 2] = 0x86900000,
+        [0x284 >> 2] = 0x00400000,
+	[0x300 >> 2] = 0x10000027,
+	[0x304 >> 2] = 0x80000014,
+	[0x310 >> 2] = 0x1000001f,
+	[0x312 >> 2] = 0x8000000f,
+	[0x320 >> 2] = 0x106e42ce,
+	[0x324 >> 2] = 0x80000167,
+	[0x328 >> 2] = 0x106e42ce,
+	[0x32c >> 2] = 0x80000167,
+	[0x330 >> 2] = 0x00014506,
+	[0x334 >> 2] = 0x000145c0,
+	[0x388 >> 2] = 0x0c9100d2,
+	//[0x3 >> 2] = 0x,
+	[0x780 >> 2] = 0x00000000,
+	[0x784 >> 2] = 0x00000004,
+};
+
+static void aspeed_2750_scu1_class_init(ObjectClass *klass, void *data)
+{
+    DeviceClass *dc = DEVICE_CLASS(klass);
+    AspeedSCUClass *asc = ASPEED_SCU_CLASS(klass);
+
+    dc->desc = "ASPEED 2750 System Control Unit I/O";
+    dc->reset = aspeed_ast2750_scu_reset;
+    asc->resets = ast2750_a0_resets_1;
+    asc->calc_hpll = aspeed_2750_scu_calc_hpll;
+    asc->get_apb = aspeed_2750_scu_get_apb_freq;
+    asc->apb_divider = 4;
+    asc->nr_regs = ASPEED_AST2750_SCU_NR_REGS;
+    asc->clkin_25Mhz = true;
+    asc->ops = &aspeed_ast2750_scu1_ops;
+}
+
+static const TypeInfo aspeed_2750_scu_info = {
+        .name = TYPE_ASPEED_2750_SCU,
+        .parent = TYPE_ASPEED_SCU,
+        .instance_size = sizeof(AspeedSCUState),
+        .class_init = aspeed_2750_scu_class_init,
+};
+
+static const TypeInfo aspeed_2750_scu1_info = {
+        .name = TYPE_ASPEED_2750_SCU1,
+        .parent = TYPE_ASPEED_SCU,
+        .instance_size = sizeof(AspeedSCUState),
+        .class_init = aspeed_2750_scu1_class_init,
+};
+
 static const uint32_t ast1030_a1_resets[ASPEED_AST2600_SCU_NR_REGS] = {
     [AST2600_SYS_RST_CTRL]      = 0xFFC3FED8,
     [AST2600_SYS_RST_CTRL2]     = 0x09FFFFFC,
@@ -841,6 +1112,8 @@ static void aspeed_scu_register_types(void)
     type_register_static(&aspeed_2500_scu_info);
     type_register_static(&aspeed_2600_scu_info);
     type_register_static(&aspeed_1030_scu_info);
+    type_register_static(&aspeed_2750_scu_info);
+    type_register_static(&aspeed_2750_scu1_info);
 }
 
 type_init(aspeed_scu_register_types);

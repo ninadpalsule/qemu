@@ -170,6 +170,10 @@ struct AspeedMachineState {
 #define AST2600_EVB_HW_STRAP1 0x000000C0
 #define AST2600_EVB_HW_STRAP2 0x00000003
 
+/* AST2750 evb hardware value */
+#define AST2750_EVB_HW_STRAP1 0x000000C0
+#define AST2750_EVB_HW_STRAP2 0x00000003
+
 /* Tacoma hardware value */
 #define TACOMA_BMC_HW_STRAP1  0x00000000
 #define TACOMA_BMC_HW_STRAP2  0x00000040
@@ -281,12 +285,14 @@ static void aspeed_install_boot_rom(AspeedMachineState *bmc, BlockBackend *blk,
                                     uint64_t rom_size)
 {
     AspeedSoCState *soc = &bmc->soc;
+    AspeedSoCClass *sc = ASPEED_SOC_GET_CLASS(soc);
 
     memory_region_init_rom(&bmc->boot_rom, NULL, "aspeed.boot_rom", rom_size,
                            &error_abort);
     memory_region_add_subregion_overlap(&soc->spi_boot_container, 0,
                                         &bmc->boot_rom, 1);
-    write_boot_rom(blk, ASPEED_SOC_SPI_BOOT_ADDR, rom_size, &error_abort);
+    // write_boot_rom(blk, ASPEED_SOC_SPI_BOOT_ADDR, rom_size, &error_abort);
+    write_boot_rom(blk, sc->memmap[ASPEED_DEV_SPI_BOOT], rom_size, &error_abort);
 }
 
 void aspeed_board_init_flashes(AspeedSMCState *s, const char *flashtype,
@@ -331,16 +337,16 @@ static void sdhci_attach_drive(SDHCIState *sdhci, DriveInfo *dinfo)
 
 static void connect_serial_hds_to_uarts(AspeedMachineState *bmc)
 {
-    AspeedMachineClass *amc = ASPEED_MACHINE_GET_CLASS(bmc);
+    //AspeedMachineClass *amc = ASPEED_MACHINE_GET_CLASS(bmc);
     AspeedSoCState *s = &bmc->soc;
     AspeedSoCClass *sc = ASPEED_SOC_GET_CLASS(s);
-    int uart_chosen = bmc->uart_chosen ? bmc->uart_chosen : amc->uart_default;
-
-    aspeed_soc_uart_set_chr(s, uart_chosen, serial_hd(0));
-    for (int i = 1, uart = ASPEED_DEV_UART1; i < sc->uarts_num; i++, uart++) {
-        if (uart == uart_chosen) {
-            continue;
-        }
+//    int uart_chosen = bmc->uart_chosen ? bmc->uart_chosen : amc->uart_default;
+//printf("UART0 = %d CHOSEN = %d\n", ASPEED_DEV_UART0, ASPEED_DEV_UART12);
+    // aspeed_soc_uart_set_chr(s, uart_chosen, serial_hd(0));
+    for (int i = 0, uart = ASPEED_DEV_UART0; i < sc->uarts_num; i++, uart++) {
+        // if (uart == uart_chosen) {
+        //     continue;
+        // }
         aspeed_soc_uart_set_chr(s, uart, serial_hd(i));
     }
 }
@@ -1086,7 +1092,7 @@ static char *aspeed_get_bmc_console(Object *obj, Error **errp)
     AspeedMachineClass *amc = ASPEED_MACHINE_GET_CLASS(bmc);
     int uart_chosen = bmc->uart_chosen ? bmc->uart_chosen : amc->uart_default;
 
-    return g_strdup_printf("uart%d", uart_chosen - ASPEED_DEV_UART1 + 1);
+    return g_strdup_printf("uart%d", uart_chosen - ASPEED_DEV_UART0 + 1);
 }
 
 static void aspeed_set_bmc_console(Object *obj, const char *value, Error **errp)
@@ -1593,6 +1599,31 @@ static void aspeed_minibmc_machine_ast1030_evb_class_init(ObjectClass *oc,
     amc->macs_mask = 0;
 }
 
+#ifdef TARGET_AARCH64
+static void aspeed_machine_ast2750_evb_class_init(ObjectClass *oc,
+							  void *data)
+{
+	MachineClass *mc = MACHINE_CLASS(oc);
+	AspeedMachineClass *amc = ASPEED_MACHINE_CLASS(oc);
+
+	mc->desc = "Aspeed AST2750 EVB (Cortex-A35)";
+    amc->soc_name  = "ast2750-a0";
+    amc->hw_strap1 = AST2750_EVB_HW_STRAP1;
+    amc->hw_strap2 = AST2750_EVB_HW_STRAP2;
+    // amc->fmc_model = "mx66u51235f";
+    amc->fmc_model = "w25q01jvq";
+    // amc->spi_model = "mx66u51235f";
+    amc->spi_model = "w25q512jv";
+    amc->num_cs    = 2;
+    amc->macs_mask = ASPEED_MAC0_ON | ASPEED_MAC1_ON | ASPEED_MAC2_ON |
+                     ASPEED_MAC3_ON;
+    amc->uart_default = ASPEED_DEV_UART12;
+    mc->default_ram_size = 1 * GiB;
+    mc->default_cpus = mc->min_cpus = mc->max_cpus =
+        aspeed_soc_num_cpus(amc->soc_name);
+}
+#endif
+
 static void aspeed_machine_qcom_dc_scm_v1_class_init(ObjectClass *oc,
                                                      void *data)
 {
@@ -1718,6 +1749,12 @@ static const TypeInfo aspeed_machine_types[] = {
         .name           = MACHINE_TYPE_NAME("ast1030-evb"),
         .parent         = TYPE_ASPEED_MACHINE,
         .class_init     = aspeed_minibmc_machine_ast1030_evb_class_init,
+#ifdef TARGET_AARCH64
+    }, {
+        .name          = MACHINE_TYPE_NAME("ast2750-evb"),
+        .parent        = TYPE_ASPEED_MACHINE,
+        .class_init    = aspeed_machine_ast2750_evb_class_init,
+#endif
     }, {
         .name          = TYPE_ASPEED_MACHINE,
         .parent        = TYPE_MACHINE,

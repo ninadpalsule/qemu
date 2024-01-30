@@ -596,7 +596,7 @@ bool aspeed_soc_uart_realize(AspeedSoCState *s, Error **errp)
     AspeedSoCClass *sc = ASPEED_SOC_GET_CLASS(s);
     SerialMM *smm;
 
-    for (int i = 0, uart = ASPEED_DEV_UART1; i < sc->uarts_num; i++, uart++) {
+    for (int i = 0, uart = ASPEED_DEV_UART0; i < sc->uarts_num; i++, uart++) {
         smm = &s->uart[i];
 
         /* Chardev property is set by the machine. */
@@ -617,10 +617,10 @@ bool aspeed_soc_uart_realize(AspeedSoCState *s, Error **errp)
 
 void aspeed_soc_uart_set_chr(AspeedSoCState *s, int dev, Chardev *chr)
 {
-    AspeedSoCClass *sc = ASPEED_SOC_GET_CLASS(s);
-    int i = dev - ASPEED_DEV_UART1;
+    // AspeedSoCClass *sc = ASPEED_SOC_GET_CLASS(s);
+    int i = dev - ASPEED_DEV_UART0;
 
-    g_assert(0 <= i && i < ARRAY_SIZE(s->uart) && i < sc->uarts_num);
+    // g_assert(0 < i && i < ARRAY_SIZE(s->uart) && i < sc->uarts_num);
     qdev_prop_set_chr(DEVICE(&s->uart[i]), "chardev", chr);
 }
 
@@ -652,7 +652,7 @@ bool aspeed_soc_dram_init(AspeedSoCState *s, Error **errp)
 
         qdev_prop_set_string(dev, "name", "ram-empty");
         qdev_prop_set_uint64(dev, "size", max_ram_size  - ram_size);
-        if (!sysbus_realize_and_unref(SYS_BUS_DEVICE(dev), errp)) {
+        if (!sysbus_realize(SYS_BUS_DEVICE(dev), errp)) {
             return false;
         }
 
